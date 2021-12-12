@@ -1,0 +1,119 @@
+/** Psuedocode for Election Day simulation with Semaphores **/
+// Steven Necola - Election Day Project 2
+
+int num_voters = 20;
+int num_ID_checkers = 3;
+int num_k = 2;
+int num_sm = 4;
+
+Counting sem idCheckersAvailable = num_ID_checkers;
+Counting sem idCheckersBusy = 0;
+
+Binary sem[] kioskLine = {1, 1, 1 ...}
+Counting sem kioskHelper = num_k
+Boolean[] kioskAvailable = new Boolean[num_k] (initialize all to 0)
+
+int numVoters = 0;
+Binary sem group = 0;
+Counting sem smHelper = num_sm;
+Counting sem smVoter = 0;
+
+int finishedVoters = 0;
+Boolean votersStillHere = true;
+
+Binary sem Mutex = 1;
+
+Voter () {
+
+    /*      Step 1 -- Voters Arrive         */
+    Arrive()                     // Arrives at the designated voting place (msg here)
+    P(idCheckersAvailable)       // Waits for one of the available ID Checkers
+    V(idCheckersBusy)            // Signal IDChecker is busy to begin IDCheck (msg here)
+
+    /*      Step 2 -- ID Check              */
+    P(Mutex)
+    int i = FindShortestLine()  // Finds the shortest kiosk line # and stores it in i
+    V(Mutex)
+
+    /*      Step 3 -- Voters use Kiosk      */
+    // Voters enter the shortest kiosk line and wait
+    P(kioskLine[i])             // Starts as 1, voter can move on.
+    // Voters use the kiosk and enter their information
+    EnterInformation()
+    // Voters let kioskHelper know they're done
+    P(Mutex)
+        kioskAvailable[i]=true;
+    V(Mutex)
+    V(kioskHelper)
+
+    /*      Step 4 -- Voters Scan Ballot    */
+    // Group the voters up
+    P(Mutex)
+    numVoters++;
+        if(numVoters == num_sm) {
+            numVoters=0;
+            V(Mutex)
+            for (int i = 0; i < num_sm - 1; i++) {
+                V(group)
+            }
+        } else {
+            V(Mutex);
+            P(group);
+        }
+    // Wait for the helper to let this group in
+    P(smHelper)
+    // Voter scans ballot
+    ScanBallot();
+    // Voter lets helper know they're done
+    V(smVoter)
+
+    /*      Step 5 -- Voters Leave          */
+    // Keep track of how many voters leave the building so helpers can go home
+    P(Mutex)
+        finishedVoters++;
+        if (finishedVoters == num_voters) {
+            votersStillHere = false;
+        }
+    V(Mutex)
+
+    // Voter leaves the building
+    leave()
+}
+
+IDChecker () {
+    while(votersStillHere) {
+        P(idCheckersBusy)
+        CheckVoterId()
+        V(idCheckerAvailable)
+    }
+}
+
+
+KioskHelper () {
+    while(votersStillHere) {
+        // Waits until a voter is done with their kiosk
+        P(kioskHelper)
+        // Lets the next voter in that kiosk line know a kiosk is available
+        for (int i = 0; i < num_k; i++) {
+            P(Mutex)
+            if (kioskAvailable[i]){
+                V(kioskLine[i])
+                kioskAvailable[i]=false;
+            }
+            V(Mutex)
+        }
+    }
+}
+
+ScanningHelper () {
+    while(votersStillHere) {
+        // Waits for all voters in the room to signal they're finished
+        for (int i = 0; i < num_sm; i++) {
+            P(smVoter)
+        }
+        // Signals the next group of voters to enter the scanning machine room
+        for (int i = 0; i < num_sm; i++) {
+            V(smHelper)
+        }
+    }
+}
